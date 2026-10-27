@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#304529" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="./logo-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./logo-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta
+      name="description"
+      content="Un estudio de animación para convertir tus sprites PNG en historias. Edita cortes, personajes, fondos y escenas, y exporta tu película."
+    />
+    <title>SpriteLab · Estudio de animación</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <a class="brand" href="." aria-label="SpriteLab"
+        ><img
+          class="brand-icon"
+          src="./logo-192.png"
+          width="29"
+          height="29"
+          alt=""
+        />SpriteLab <span class="studio-badge">STUDIO</span></a
+      ><span class="header-divider"></span
+      ><input
+        id="project-name"
+        aria-label="Nombre del proyecto"
+        maxlength="80"
+        value="Una pequeña aventura"
+      /><span id="save-status" class="save-status"
+        ><i></i> Solo en tu navegador</span
+      >
+      <div class="header-actions">
+        <button
+          id="undo"
+          class="icon-button"
+          title="Deshacer · Ctrl+Z"
+          aria-label="Deshacer"
+        >
+          ↶</button
+        ><button
+          id="redo"
+          class="icon-button"
+          title="Rehacer · Ctrl+Mayús+Z"
+          aria-label="Rehacer"
+        >
+          ↷</button
+        ><button id="project-menu" class="quiet">Proyecto <span>⌄</span></button
+        ><button
+          id="share-video"
+          class="quiet"
+          hidden
+          title="Compartir el último vídeo"
+        >
+          Compartir</button
+        ><button id="open-export" class="accent">
+          ↗ <span>Exportar</span>
+        </button>
+      </div>
+    </header>
+    <div id="project-popover" class="popover" hidden>
+      <button id="save-project">↓ Descargar proyecto</button
+      ><button id="load-project">↑ Abrir proyecto</button
+      ><button id="new-project">＋ Proyecto vacío</button
+      ><button id="help">? Guía del estudio</button>
+    </div>
+    <input
+      id="project-file"
+      type="file"
+      accept="application/json,.json"
+      hidden
+    />
+    <div class="mobile-nav">
+      <button data-panel="library">▧ Biblioteca</button
+      ><button data-panel="editor" class="active">◈ Escenario</button
+      ><button data-panel="inspector">☷ Propiedades</button>
+    </div>
+    <div class="studio-layout" id="studio-layout">
+      <aside class="library panel" id="library-panel">
+        <div class="section-title">
+          <h2>Biblioteca</h2>
+          <span id="asset-count">0 recursos</span>
+        </div>
+        <div class="library-tabs" role="tablist" aria-label="Tipo de recurso">
+          <button
+            data-library="sprite"
+            role="tab"
+            aria-selected="true"
+            class="active"
+          >
+            Sprites</button
+          ><button data-library="background" role="tab" aria-selected="false">
+            Fondos</button
+          ><button data-library="audio" role="tab" aria-selected="false">
+            Audio
+          </button>
+        </div>
+        <button id="import-assets" class="import-button">
+          <span>＋</span> Importar PNG / imágenes</button
+        ><input
+          id="asset-file"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          multiple
+          hidden
+        />
+        <div id="asset-list" class="asset-list"></div>
+        <div class="library-bottom">
+          <button id="ai-prompt">
+            ✦ Prepara tu sprite con IA <span>↗</span>
+          </button>
+          <p>Trae tus PNG. Crea tu propia historia.</p>
+        </div>
+      </aside>
+      <main class="editor panel" id="editor-panel">
+        <div class="editor-tabs">
+          <div>
+            <button id="scene-tab" class="active">◈ Escenario</button
+            ><button id="sprite-tab">▦ Editor de sprites</button>
+          </div>
+          <button id="mobile-properties" class="mobile-properties">
+            ☷ Cortes / propiedades</button
+          ><button
+            id="expand-editor"
+            class="icon-button"
+            title="Ampliar espacio de trabajo"
+            aria-label="Ampliar espacio de trabajo"
+          >
+            ⛶
+          </button>
+        </div>
+        <div id="scene-workspace" class="scene-workspace">
+          <div class="canvas-toolbar">
+            <div>
+              <span class="status-dot"></span
+              ><span id="active-scene-name">Escena 01</span
+              ><span class="toolbar-divider"></span
+              ><button id="aspect-button">16:9 <span>⌄</span></button>
+            </div>
+            <div class="zoom-controls">
+              <button id="zoom-out" aria-label="Alejar">−</button
+              ><span id="zoom-value">Ajustar</span
+              ><button id="zoom-in" aria-label="Acercar">＋</button
+              ><button id="fit-stage" title="Ajustar al espacio">⊡</button>
+            </div>
+          </div>
+          <div class="stage-viewport" id="stage-viewport">
+            <div id="stage-box" class="stage-box">
+              <canvas
+                id="stage"
+                width="960"
+                height="540"
+                aria-label="Escenario de animación; arrastra los personajes para posicionarlos."
+              ></canvas>
+              <div id="selection-box" hidden>
+                <span></span><span></span><span></span><span></span
+                ><b id="selection-label"></b>
+              </div>
+            </div>
+            <div class="stage-empty" id="stage-empty" hidden>
+              <strong>Tu próxima historia empieza aquí.</strong>
+              <p>Importa un PNG o añade una escena para empezar.</p>
+              <button id="empty-add-scene" class="accent">
+                ＋ Crear escena
+              </button>
+            </div>
+          </div>
+          <div class="stage-caption">
+            <span>↔ Arrastra para posicionar · Inicio y final para animar</span
+            ><span id="canvas-size">1920 × 1080</span>
+          </div>
+        </div>
+        <div id="sprite-workspace" class="sprite-workspace" hidden>
+          <div class="canvas-toolbar">
+            <strong id="sprite-editor-name">Selecciona un sprite</strong>
+            <div class="zoom-controls">
+              <button id="sprite-zoom-out" aria-label="Alejar sprite">−</button
+              ><span id="sprite-zoom-value">100%</span
+              ><button id="sprite-zoom-in" aria-label="Acercar sprite">
+                ＋</button
+              ><button id="sprite-fit">Ajustar</button>
+            </div>
+          </div>
+          <div class="sprite-viewport" id="sprite-viewport">
+            <canvas
+              id="sprite-canvas"
+              width="384"
+              height="48"
+              aria-label="Editor de rejilla. Arrastra las líneas; haz clic en una celda para activarla o excluirla."
+            ></canvas>
+            <p id="sprite-empty">
+              Selecciona o importa una hoja de sprites PNG.
+            </p>
+          </div>
+          <div class="sprite-bottom">
+            <div>
+              <strong id="sprite-frame-count">8 poses</strong
+              ><span
+                >Arrastra los cortes · Clic en una celda para incluir /
+                excluir</span
+              >
+            </div>
+            <div class="sprite-mini">
+              <canvas id="sprite-preview" width="80" height="80"></canvas
+              ><span id="sprite-preview-info">8 FPS</span>
+            </div>
+            <button id="add-sprite-scene" class="accent">
+              ＋ Añadir a la escena
+            </button>
+          </div>
+        </div>
+        <div class="player-bar">
+          <div class="player-left">
+            <button
+              id="go-start"
+              title="Ir al principio"
+              aria-label="Ir al principio"
+            >
+              |◀</button
+            ><button id="play" class="play-button" aria-label="Reproducir">
+              ▶</button
+            ><button
+              id="step-frame"
+              title="Avanzar un fotograma"
+              aria-label="Avanzar un fotograma"
+            >
+              ▶|</button
+            ><span id="timecode">00:00.00 <em>/ 00:08.00</em></span>
+          </div>
+          <div class="player-right">
+            <label class="loop-toggle"
+              ><input type="checkbox" id="loop" checked /> Bucle</label
+            ><button id="add-text">T <span>Añadir texto</span></button>
+          </div>
+        </div>
+      </main>
+      <aside class="inspector panel" id="inspector-panel">
+        <div class="section-title">
+          <h2>Propiedades</h2>
+          <span id="inspector-type">ESCENA</span>
+        </div>
+        <div id="inspector-content"></div>
+        <div class="preview-section">
+          <div class="subheading">
+            <span>VISTA PREVIA</span><span class="status-dot"></span>
+          </div>
+          <div class="preview-wrap">
+            <canvas id="mini-preview" width="320" height="180"></canvas>
+          </div>
+          <div class="preview-caption">
+            <span id="preview-aspect">Horizontal · 16:9</span
+            ><span id="preview-fps">30 FPS</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <section class="timeline panel">
+      <div class="timeline-toolbar">
+        <div>
+          <h2>Montaje</h2>
+          <span id="scene-count" class="count-badge">2 escenas</span>
+        </div>
+        <div class="timeline-tools">
+          <span class="timeline-tip"
+            >Arrastra escenas para ordenar · Estira el borde para ajustar</span
+          ><button id="add-scene">＋ Escena</button>
+        </div>
+      </div>
+      <div class="timeline-scroll" id="timeline-scroll">
+        <div class="timeline-content" id="timeline-content">
+          <div class="time-ruler" id="time-ruler"></div>
+          <div class="scene-track">
+            <div class="track-label">◈ Escenas</div>
+            <div id="scene-clips"></div>
+          </div>
+          <div class="audio-track">
+            <div class="track-label">♫ Audio</div>
+            <div id="audio-clip">
+              <button id="add-audio">＋ Añade música o narración</button>
+            </div>
+          </div>
+          <div class="playhead" id="playhead"><span></span></div>
+        </div>
+      </div>
+      <div class="timeline-footer">
+        <span id="timeline-info"
+          >Todo lo que necesitas para contar tu historia.</span
+        ><span>SPRITELAB <i>·</i> 100% NAVEGADOR</span>
+      </div>
+    </section>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="export-dialog">
+      <div class="dialog-title">
+        <div>
+          <span class="eyebrow">DEL ESTUDIO AL MUNDO</span>
+          <h2>Tu historia, lista para salir.</h2>
+        </div>
+        <button
+          data-close="export-dialog"
+          class="icon-button"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p>Elige el lienzo de tu proyecto y el formato de vídeo.</p>
+      <div class="aspect-options">
+        <button data-preset="vertical">
+          <span>▯</span>Vertical<small>Reels · TikTok · Shorts</small></button
+        ><button data-preset="horizontal" class="selected">
+          <span>▭</span>Horizontal<small
+            >YouTube · Presentaciones</small
+          ></button
+        ><button data-preset="square">
+          <span>□</span>Cuadrado<small>Publicaciones · Feed</small></button
+        ><button data-preset="custom">
+          <span>⌗</span>Personalizado<small>Tu propio formato</small>
+        </button>
+      </div>
+      <label class="field"
+        >Resolución rápida<select id="quality-preset">
+          <option value="original">Tamaño seleccionado</option>
+          <option value="720">HD · lado corto 720 px</option>
+          <option value="1080">Full HD · lado corto 1080 px</option>
+          <option value="480">Ligero · lado corto 480 px</option>
+        </select></label
+      >
+      <div class="form-grid three">
+        <label
+          >Ancho (px)<input
+            id="output-width"
+            type="number"
+            min="64"
+            max="4096"
+            step="2"
+            value="1920" /></label
+        ><label
+          >Alto (px)<input
+            id="output-height"
+            type="number"
+            min="64"
+            max="4096"
+            step="2"
+            value="1080" /></label
+        ><label
+          >Fotogramas / s<select id="output-fps">
+            <option value="24">24 FPS · Cine</option>
+            <option value="30" selected>30 FPS · Redes</option>
+            <option value="60">60 FPS · Fluido</option>
+          </select></label
+        >
+      </div>
+      <p class="form-note">
+        Las posiciones se adaptan al formato. Resolución de 64 a 4096 px por
+        lado, hasta 8,3 megapíxeles.
+      </p>
+      <label class="field"
+        >Formato de vídeo<select id="video-format"></select
+      ></label>
+      <div class="export-summary">
+        <span id="export-summary"></span><span>Sin marca de agua</span>
+      </div>
+      <div class="export-progress" id="export-progress" hidden>
+        <progress id="export-meter" max="100" value="0"></progress
+        ><span id="export-status">Preparando…</span>
+      </div>
+      <div class="dialog-actions">
+        <button id="cancel-export" hidden>Cancelar exportación</button
+        ><button id="apply-resolution" class="quiet">Aplicar al proyecto</button
+        ><button id="export-video" class="accent">↗ Exportar película</button>
+      </div>
+      <p class="form-note">
+        La exportación ocurre en tiempo real. Mantén esta pestaña visible. MP4
+        depende de tu navegador; WebM es la alternativa. En celulares, 720 ×
+        1280 o 1280 × 720 suele exportar más rápido.
+      </p>
+    </dialog>
+    <dialog id="prompt-dialog">
+      <div class="dialog-title">
+        <div>
+          <span class="eyebrow">DE UNA IDEA A TUS PROPIOS SPRITES</span>
+          <h2>Prepara tu personaje con IA</h2>
+        </div>
+        <button
+          data-close="prompt-dialog"
+          class="icon-button"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p>
+        Prepara el prompt, úsalo en tu generador de imágenes y trae el PNG al
+        estudio.
+      </p>
+      <div class="form-grid">
+        <label
+          >Personaje<input
+            id="prompt-character"
+            value="Un pequeño explorador del bosque" /></label
+        ><label
+          >Acción<input
+            id="prompt-action"
+            value="Caminar hacia la derecha" /></label
+        ><label
+          >Estilo<select id="prompt-style">
+            <option>Pixel art</option>
+            <option>Ilustración 2D</option>
+            <option>Cartoon</option>
+            <option>Anime 2D</option>
+          </select></label
+        ><label
+          >Número de poses<select id="prompt-frames">
+            <option>4</option>
+            <option selected>8</option>
+            <option>12</option>
+          </select></label
+        >
+      </div>
+      <textarea
+        id="prompt-output"
+        rows="7"
+        aria-label="Prompt para generar sprites"
+      ></textarea>
+      <div class="dialog-actions">
+        <button id="copy-prompt" class="accent">Copiar prompt</button
+        ><button data-close="prompt-dialog">Volver al estudio</button>
+      </div>
+    </dialog>
+    <dialog id="help-dialog">
+      <div class="dialog-title">
+        <h2>Una historia, escena a escena.</h2>
+        <button
+          data-close="help-dialog"
+          class="icon-button"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <ol class="guide">
+        <li>
+          <strong>Importa tus recursos.</strong> PNG de sprites, fondos e
+          incluso música o narración.
+        </li>
+        <li>
+          <strong>Prepara los cortes.</strong> Configura filas y columnas, mueve
+          las líneas y excluye poses que no necesites.
+        </li>
+        <li>
+          <strong>Compón la escena.</strong> Añade varios personajes y textos.
+          Arrastra para colocarlos, elige su tamaño y define inicio y final del
+          movimiento.
+        </li>
+        <li>
+          <strong>Monta la historia.</strong> Añade, duplica y reordena escenas.
+          Cambia sus duraciones y previsualiza la película.
+        </li>
+        <li>
+          <strong>Exporta para compartir.</strong> Elige vertical, horizontal o
+          un tamaño personalizado y descarga el vídeo.
+        </li>
+      </ol>
+      <p>
+        Los proyectos viven solo en memoria. Descarga el proyecto para conservar
+        tus imágenes, audio y montaje; vuelve a abrir ese archivo para
+        continuar. El estudio no genera imágenes con IA ni publica en redes
+        directamente.
+      </p>
+      <p class="form-note">
+        Espacio: reproducir · Supr: quitar capa · Ctrl/⌘ Z: deshacer · Ctrl/⌘ S:
+        descargar proyecto.
+      </p>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-description"></p>
+      <div class="dialog-actions">
+        <button id="confirm-cancel">Cancelar</button
+        ><button id="confirm-ok" class="accent">Continuar</button>
+      </div>
+    </dialog>
+    <script src="app.js"></script>
+  </body>
+</html>
