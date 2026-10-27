@@ -39,7 +39,7 @@ La opción de IA prepara un prompt para tu generador de imágenes; no genera im�
 - Vídeo MP4 o WebM, según los codificadores que ofrezca `MediaRecorder` en el navegador. La disponibilidad se comprueba en el dispositivo; MP4 no se promete en todos ellos.
 - Exportación en tiempo real con la pestaña visible. No es un renderizador offline ni un servicio en la nube.
 - Lienzos con dimensiones pares de 64 a 4096 px por lado y hasta 8,3 megapíxeles. En celulares se recomienda HD (720 × 1280 o 1280 × 720) y proyectos cortos.
-- Hasta 80 recursos, 100 escenas y 80 capas por escena. Cada imagen o audio puede ocupar hasta 20 MB; las imágenes se limitan a 16 megapíxeles. Las rejillas admiten hasta 256 poses.
+- Hasta 80 recursos, 100 escenas y 80 capas por escena. Cada imagen o audio puede ocupar hasta 20 MB, con 64 MB de recursos codificados por proyecto; las imágenes se limitan a 16 megapíxeles. Las rejillas admiten hasta 256 poses.
 - Una pista de música o narración desde el inicio; no hay mezclador multipista. Los fundidos son a negro. No hay generación de imágenes ni publicación automática en redes.
 - Un archivo de proyecto de hasta 100 MB. Compatible con los proyectos de película de la versión anterior (`spritelab-movie` v1).
 

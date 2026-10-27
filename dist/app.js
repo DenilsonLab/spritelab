@@ -270,6 +270,14 @@ async function importFiles(files, type = libraryType) {
         throw Error("Máximo 80 recursos por proyecto.");
       if (file.size > 20 * 1024 * 1024)
         throw Error("Cada recurso puede ocupar hasta 20 MB.");
+      const resourceBytes = [...project.assets, ...added].reduce(
+        (n, a) => n + a.src.length,
+        0,
+      );
+      if (resourceBytes + Math.ceil((file.size * 4) / 3) > 64 * 1024 * 1024)
+        throw Error(
+          "El proyecto supera 64 MB de recursos codificados. Quita recursos que no uses.",
+        );
       if (type === "audio") {
         if (!file.type.startsWith("audio/"))
           throw Error("Selecciona un archivo de audio.");
@@ -2359,6 +2367,10 @@ async function saveProject() {
   try {
     const revision = saveRevision;
     const blob = await projectIO("serialize", snapshot());
+    if (blob.size > 100 * 1024 * 1024)
+      throw Error(
+        "El archivo supera 100 MB. Reduce recursos o capas antes de descargarlo.",
+      );
     download(blob, cleanName() + ".spritelab.json");
     savedRevision = revision;
     if (savedRevision === saveRevision) {
