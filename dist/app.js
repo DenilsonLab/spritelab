@@ -1,4 +1,8 @@
 "use strict";
+function isMobileWorkspace() {
+  return matchMedia("(max-width:730px), (max-width:900px) and (pointer:coarse)")
+    .matches;
+}
 const $ = (id) => document.getElementById(id),
   uid = () => crypto.randomUUID(),
   clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -126,6 +130,8 @@ function changed() {
 function updateUndo() {
   $("undo").disabled = !history.length || recording;
   $("redo").disabled = !future.length || recording;
+  if ($("mobile-undo")) $("mobile-undo").disabled = $("undo").disabled;
+  if ($("mobile-redo")) $("mobile-redo").disabled = $("redo").disabled;
 }
 function restoreSnapshot(p) {
   stop();
@@ -358,6 +364,9 @@ function renderLibrary() {
   list.replaceChildren();
   const items = project.assets.filter((a) => a.type === libraryType);
   $("asset-count").textContent = project.assets.length + " recursos";
+  $("library-scene-context").textContent = scene()
+    ? "Escena actual: " + scene().name
+    : "Añade un sprite para crear tu primera escena";
   $("import-assets").innerHTML =
     "<span>＋</span> " +
     {
@@ -437,16 +446,36 @@ function renderLibrary() {
       selectAsset(a.id);
     };
     const del = document.createElement("button");
-    del.textContent = "Quitar";
+    const instances = scene()?.layers.filter((l) => l.assetId === a.id) || [];
+    const inScene =
+      a.type === "sprite"
+        ? instances.length > 0
+        : a.type === "background"
+          ? scene()?.background === a.id
+          : project.audio?.assetId === a.id;
+    del.textContent =
+      a.type === "audio" ? "Quitar de la película" : "Quitar de esta escena";
+    del.hidden = !inScene;
+    del.setAttribute("aria-label", del.textContent + " " + a.name);
     del.onclick = (e) => {
       e.stopPropagation();
-      removeAsset(a.id);
+      removeAssetFromCurrentScene(a.id);
     };
     footer.append(edit, del);
-    card.append(thumb, meta, footer);
+    const options = el("details", "asset-options"),
+      summary = el("summary", null, "Opciones del recurso");
+    const erase = button(
+      "Eliminar de la biblioteca",
+      () => removeAsset(a.id),
+      "danger",
+    );
+    erase.setAttribute("aria-label", "Eliminar de la biblioteca " + a.name);
+    options.append(summary, erase);
+    options.onclick = (e) => e.stopPropagation();
+    card.append(thumb, meta, footer, options);
     card.onclick = () => selectAsset(a.id);
     card.onkeydown = (e) => {
-      if (e.key === "Enter") selectAsset(a.id);
+      if (e.target === card && e.key === "Enter") selectAsset(a.id);
     };
     list.append(card);
   }
@@ -523,21 +552,14 @@ async function removeAsset(id) {
     project.scenes.some(
       (s) => s.background === id || s.layers.some((l) => l.assetId === id),
     ) || project.audio?.assetId === id;
-  if (
-    used &&
-    !(await confirmAction(
-      "¿Quitar este recurso?",
-      "También se quitará de las escenas o del audio donde se utiliza.",
-    ))
-  )
+  if (used) {
+    toast(
+      "Este recurso todavía se usa. Quita sus personajes de cada escena antes de eliminarlo de la biblioteca.",
+    );
     return;
+  }
   checkpoint();
   project.assets = project.assets.filter((a) => a.id !== id);
-  project.scenes.forEach((s) => {
-    s.layers = s.layers.filter((l) => l.assetId !== id);
-    if (s.background === id) s.background = null;
-  });
-  if (project.audio?.assetId === id) project.audio = null;
   if (assetId === id)
     assetId = project.assets.find((a) => a.type === libraryType)?.id || null;
   layerId = null;
@@ -710,7 +732,7 @@ function render() {
     mini.width = mw;
     mini.height = mh;
   }
-  if (innerWidth > 730)
+  if (!isMobileWorkspace() || $("studio-layout").dataset.mobile === "inspector")
     drawScene(miniCtx, at?.s, at?.local || 0, mini.width, mini.height);
   $("stage-empty").hidden = !!project.scenes.length;
   $("active-scene-name").textContent = at?.s.name || "Sin escenas";
@@ -723,6 +745,7 @@ function render() {
   $("aspect-button").innerHTML = aspectRatio() + " <span>⌄</span>";
   $("scene-count").textContent = project.scenes.length + " escenas";
   selectionOverlay();
+  syncMobileSelection();
   if (mode === "sprite") drawSpritePreview();
 }
 function clock(t) {
@@ -943,6 +966,7 @@ function field(parent, label, value, options, handler) {
   } else {
     input = el("input");
     input.type = options?.type || "text";
+    if (input.type === "number") input.inputMode = "decimal";
     if (input.type === "text") input.maxLength = 80;
     for (const key of ["min", "max", "step"])
       if (options?.[key] !== undefined) input[key] = options[key];
@@ -1050,6 +1074,22 @@ function renderInspector() {
       );
     }
     root.append(g);
+    const quickActions = el("div", "property-actions primary-layer-actions");
+    quickActions.append(
+      button("Duplicar", duplicateLayer),
+      button("Quitar de la escena", deleteLayer, "danger"),
+    );
+    root.append(quickActions);
+    const order = group("ORDEN EN ESTA ESCENA");
+    order.append(
+      layerOrderControls(),
+      el(
+        "p",
+        "property-hint",
+        "Traer adelante coloca esta capa encima de otra. El orden de las otras escenas no cambia.",
+      ),
+    );
+    root.append(order);
     const movement = group("POSICIÓN Y MOVIMIENTO");
     const tabs = el("div", "point-tabs");
     for (const [key, name] of [
@@ -1154,12 +1194,6 @@ function renderInspector() {
       ),
     );
     root.append(movement);
-    const actions = el("div", "property-actions");
-    actions.append(
-      button("Duplicar", duplicateLayer),
-      button("Quitar", deleteLayer, "danger"),
-    );
-    root.append(actions);
   } else {
     const g = group("TU ESCENA");
     field(g, "Nombre", s.name, { id: "scene-name" }, (v) => (s.name = v));
@@ -1235,7 +1269,7 @@ function renderInspector() {
     );
     root.append(actions, order);
   }
-  const layers = group("CAPAS DE LA ESCENA");
+  const layers = group("CAPAS · ARRIBA = DELANTE");
   const stack = el("div", "layers");
   for (const item of [...s.layers].reverse()) {
     const row = el(
@@ -1279,8 +1313,8 @@ function renderInspector() {
   const layerActions = el("div", "layer-options");
   if (l) {
     layerActions.append(
-      button("↑ Subir", () => moveLayer(1)),
-      button("↓ Bajar", () => moveLayer(-1)),
+      button("Traer adelante", () => moveLayer(1)),
+      button("Enviar atrás", () => moveLayer(-1)),
     );
   }
   if (l)
@@ -1345,6 +1379,7 @@ function renderSpriteInspector(root, a) {
     ci = el("input"),
     ri = el("input");
   ci.type = ri.type = "number";
+  ci.inputMode = ri.inputMode = "numeric";
   ci.min = ri.min = 1;
   ci.max = ri.max = 64;
   ci.value = a.cols;
@@ -1359,31 +1394,7 @@ function renderSpriteInspector(root, a) {
     button(
       "Aplicar rejilla uniforme",
       () => {
-        const c = +ci.value,
-          r = +ri.value;
-        if (
-          !Number.isInteger(c) ||
-          !Number.isInteger(r) ||
-          c < 1 ||
-          r < 1 ||
-          c > 64 ||
-          r > 64 ||
-          c * r > 256 ||
-          c > a.width ||
-          r > a.height
-        )
-          return toast(
-            "Usa una rejilla de 1 a 256 poses, con un máximo de 64 filas o columnas.",
-          );
-        checkpoint();
-        a.cols = c;
-        a.rows = r;
-        a.xCuts = Array.from({ length: c + 1 }, (_, i) => (i * a.width) / c);
-        a.yCuts = Array.from({ length: r + 1 }, (_, i) => (i * a.height) / r);
-        a.frames = Array.from({ length: c * r }, (_, i) => i);
-        syncAsset(a);
-        refresh();
-        changed();
+        applyGrid(a, +ci.value, +ri.value);
       },
       "accent",
     ),
@@ -1596,27 +1607,87 @@ function duplicateLayer() {
   refresh();
   changed();
 }
-function deleteLayer() {
-  const s = scene(),
-    l = layer();
-  if (!s || !l || recording) return;
+function deleteLayer(targetSceneId = sceneId, targetLayerId = layerId) {
+  if (typeof targetSceneId !== "string") {
+    targetSceneId = sceneId;
+    targetLayerId = layerId;
+  }
+  const s = project.scenes.find((item) => item.id === targetSceneId);
+  if (!s || !s.layers.some((item) => item.id === targetLayerId) || recording)
+    return false;
   checkpoint();
-  s.layers = s.layers.filter((v) => v.id !== l.id);
-  layerId = null;
+  s.layers = s.layers.filter((item) => item.id !== targetLayerId);
+  if (sceneId === targetSceneId && layerId === targetLayerId) layerId = null;
   refresh();
   changed();
+  return true;
+}
+function removeAssetFromCurrentScene(id) {
+  const a = asset(id),
+    s = scene();
+  if (!a || recording) return;
+  if (a.type === "sprite") {
+    const instances = s?.layers.filter((l) => l.assetId === id) || [];
+    if (!instances.length) {
+      toast("Este sprite no está en la escena actual.");
+      return;
+    }
+    const selected = instances.find((l) => l.id === layerId);
+    if (instances.length > 1 && !selected) {
+      openMobileLayers();
+      toast("Hay varias copias. Elige cuál quitar de esta escena.");
+      return;
+    }
+    deleteLayer(s.id, (selected || instances[0]).id);
+    toast("Sprite quitado solo de esta escena. Sigue disponible en Recursos.");
+  } else if (a.type === "background" && s?.background === id) {
+    checkpoint();
+    s.background = null;
+    refresh();
+    changed();
+  } else if (a.type === "audio" && project.audio?.assetId === id) {
+    checkpoint();
+    project.audio = null;
+    refresh();
+    changed();
+  }
 }
 function moveLayer(delta) {
-  const s = scene(),
-    i = s?.layers.findIndex((l) => l.id === layerId),
-    to = i + delta;
-  if (i < 0 || to < 0 || to >= s.layers.length) return;
+  const s = scene();
+  if (!s || recording) return;
+  stop();
+  const i = s.layers.findIndex((l) => l.id === layerId);
+  if (i < 0) return;
+  const to = clamp(i + delta, 0, s.layers.length - 1);
+  if (to === i) return;
   checkpoint();
   const [l] = s.layers.splice(i, 1);
   s.layers.splice(to, 0, l);
   refresh();
   changed();
 }
+function layerOrderControls() {
+  const row = el("div", "layer-order-controls"),
+    s = scene(),
+    l = layer(),
+    index = s?.layers.findIndex((v) => v.id === l?.id) ?? -1;
+  for (const [name, delta, disabled] of [
+    ["Traer adelante", 1, index < 0 || index === s.layers.length - 1],
+    ["Enviar atrás", -1, index <= 0],
+    [
+      "Al frente",
+      s?.layers.length || 0,
+      index < 0 || index === s.layers.length - 1,
+    ],
+    ["Al fondo", -(s?.layers.length || 0), index <= 0],
+  ]) {
+    const b = button(name, () => moveLayer(delta));
+    b.disabled = disabled;
+    row.append(b);
+  }
+  return row;
+}
+
 function spriteFit() {
   const a = asset();
   if (!a || a.type !== "sprite") return;
@@ -1831,7 +1902,6 @@ stage.onpointerdown = (e) => {
   }
   layerId = hit?.id || null;
   if (hit) {
-    checkpoint();
     const targetTime = point === "end" ? at.s.duration - 0.0001 : 0;
     time = startOf(sceneId) + targetTime;
     drag = {
@@ -1839,6 +1909,7 @@ stage.onpointerdown = (e) => {
       y: pos.y,
       startX: hit[point + "X"],
       startY: hit[point + "Y"],
+      moved: false,
     };
     stage.setPointerCapture(e.pointerId);
     stage.style.cursor = "grabbing";
@@ -1852,6 +1923,18 @@ stage.onpointermove = (e) => {
   const l = layer();
   if (!l) return;
   const p = stageCoords(e);
+  const box = stage.getBoundingClientRect();
+  if (!drag.moved) {
+    if (
+      Math.hypot(
+        ((p.x - drag.x) / project.width) * box.width,
+        ((p.y - drag.y) / project.height) * box.height,
+      ) < 3
+    )
+      return;
+    checkpoint();
+    drag.moved = true;
+  }
   l[point + "X"] = clamp(
     drag.startX + ((p.x - drag.x) / project.width) * 100,
     -100,
@@ -1870,16 +1953,18 @@ stage.onpointermove = (e) => {
 };
 function endStage() {
   if (!drag) return;
+  const moved = drag.moved;
   drag = null;
   stage.style.cursor = "default";
   renderInspector();
   renderTimeline();
-  changed();
+  syncMobileSelection();
+  if (moved) changed();
 }
 stage.onpointerup = endStage;
 stage.onpointercancel = endStage;
 function trackLabelWidth() {
-  return innerWidth <= 730 ? 78 : 105;
+  return isMobileWorkspace() ? 78 : 105;
 }
 function clipWidth(s) {
   return Math.max(65, s.duration * 40);
@@ -2072,6 +2157,8 @@ $("time-ruler").onpointerdown = (e) => {
 function refresh() {
   scheduleAnimation();
   $("project-name").value = project.name;
+  if (document.activeElement !== $("mobile-project-name"))
+    $("mobile-project-name").value = project.name;
   $("scene-workspace").hidden = mode !== "scene";
   $("sprite-workspace").hidden = mode !== "sprite";
   $("scene-tab").classList.toggle("active", mode === "scene");
@@ -2085,13 +2172,30 @@ function refresh() {
     if (mode === "sprite") spriteFit();
   });
   updateUndo();
+  renderMobile();
 }
 function mobilePanel(name) {
+  if (isMobileWorkspace() && name !== "editor") stop();
+  if (name === "library") renderLibrary();
   $("studio-layout").dataset.mobile = name;
-  document
-    .querySelectorAll("[data-panel]")
-    .forEach((b) => b.classList.toggle("active", b.dataset.panel === name));
+  document.body.dataset.mobilePanel = name;
+  document.querySelectorAll("[data-panel]").forEach((b) => {
+    const active = b.dataset.panel === name;
+    b.classList.toggle("active", active);
+    if (active) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+  if (name === "timeline") {
+    renderMobileScenes();
+    stop();
+  }
+  if (name === "inspector") render();
+  requestAnimationFrame(() => {
+    fitStage();
+    if (mode === "sprite") spriteFit();
+  });
 }
+
 const videoTypes = [
   {
     name: "MP4 · compatible con redes sociales",
@@ -3135,11 +3239,310 @@ function projectIO(task, payload) {
     }
   });
 }
+function applyGrid(a, c, r) {
+  if (
+    !a ||
+    !Number.isInteger(c) ||
+    !Number.isInteger(r) ||
+    c < 1 ||
+    r < 1 ||
+    c > 64 ||
+    r > 64 ||
+    c * r > 256 ||
+    c > a.width ||
+    r > a.height
+  ) {
+    toast("Usa de 1 a 256 poses, con hasta 64 filas o columnas.");
+    return false;
+  }
+  checkpoint();
+  a.cols = c;
+  a.rows = r;
+  a.xCuts = Array.from({ length: c + 1 }, (_, i) => (i * a.width) / c);
+  a.yCuts = Array.from({ length: r + 1 }, (_, i) => (i * a.height) / r);
+  a.frames = Array.from({ length: c * r }, (_, i) => i);
+  syncAsset(a);
+  refresh();
+  changed();
+  return true;
+}
+function syncMobileSelection() {
+  if (!$("mobile-layer-actions")) return;
+  const l = layer(),
+    selected = mode === "scene" && !!l && !playing;
+  $("mobile-selection-actions").hidden = !selected;
+  $("mobile-add-actions").hidden = selected;
+  $("mobile-selected-name").textContent = selected
+    ? l.name + " ▾"
+    : playing
+      ? "Reproduciendo tu historia"
+      : "Seleccionar personaje ▾";
+  const s = scene(),
+    index = project.scenes.indexOf(s);
+  $("mobile-current-scene").textContent = s
+    ? "Escena " + (index + 1) + " de " + project.scenes.length
+    : "Crear mi primera escena";
+  $("mobile-prev-scene").disabled = index <= 0;
+  $("mobile-next-scene").disabled =
+    index < 0 || index >= project.scenes.length - 1;
+  $("mobile-scene-settings").disabled = !s;
+}
+function renderMobile() {
+  syncMobileSelection();
+  $("mobile-properties").textContent =
+    mode === "sprite" ? "Cortes precisos" : "Ajustes";
+  const a = asset(),
+    form = $("mobile-grid-form");
+  if (a?.type === "sprite" && !form.contains(document.activeElement)) {
+    $("mobile-grid-cols").value = a.cols;
+    $("mobile-grid-rows").value = a.rows;
+  }
+  $("mobile-grid-form")
+    .querySelectorAll("input,button")
+    .forEach((el) => (el.disabled = !a || a.type !== "sprite"));
+  if (isMobileWorkspace() && document.body.dataset.mobilePanel === "timeline")
+    renderMobileScenes();
+  $("mobile-save").classList.toggle(
+    "has-changes",
+    saveRevision !== savedRevision,
+  );
+  if ($("layers-dialog").open) openMobileLayers();
+}
+function renderMobileScenes() {
+  const root = $("mobile-scene-list");
+  root.replaceChildren();
+  root.append(
+    el(
+      "p",
+      "mobile-scene-intro",
+      "Monta tu historia en orden. Usa las flechas para mover escenas; no necesitas arrastrar.",
+    ),
+  );
+  if (!project.scenes.length)
+    root.append(button("＋ Crear mi primera escena", addScene, "accent"));
+  project.scenes.forEach((s, i) => {
+    const card = el(
+      "article",
+      "mobile-scene-card" + (s.id === sceneId ? " active" : ""),
+    );
+    const open = el("button", "mobile-scene-open");
+    open.setAttribute("aria-label", "Abrir " + s.name);
+    const thumb = el("canvas");
+    thumb.width = 144;
+    thumb.height = 82;
+    drawScene(
+      thumb.getContext("2d"),
+      s,
+      Math.min(0.4, s.duration / 2),
+      thumb.width,
+      thumb.height,
+    );
+    const title = el("div");
+    title.append(
+      el("small", null, "ESCENA " + String(i + 1).padStart(2, "0")),
+      el("strong", null, s.name),
+      el("span", null, s.layers.length + " capas · Toca para editar"),
+    );
+    open.append(thumb, title);
+    open.onclick = () => selectScene(s.id);
+    card.append(open);
+    const tools = el("div", "mobile-scene-card-tools");
+    const durationLabel = el("label", null, "Duración (s)"),
+      input = el("input");
+    input.type = "number";
+    input.inputMode = "decimal";
+    input.min = 0.5;
+    input.max = 600;
+    input.step = 0.1;
+    input.value = s.duration;
+    input.setAttribute("aria-label", "Duración de " + s.name);
+    input.onchange = () => {
+      const v = +input.value;
+      if (!Number.isFinite(v) || v < 0.5 || v > 600) {
+        input.value = s.duration;
+        toast("La duración debe estar entre 0,5 y 600 segundos.");
+        return;
+      }
+      if (v === s.duration) return;
+      checkpoint();
+      s.duration = Math.round(v * 10) / 10;
+      time = clamp(time, 0, duration());
+      refresh();
+      changed();
+    };
+    durationLabel.append(input);
+    tools.append(durationLabel);
+    const selectAction = (action) => {
+      stop();
+      sceneId = s.id;
+      layerId = null;
+      action();
+    };
+    const before = button("↑", () => selectAction(() => reorderScene(-1)));
+    before.disabled = i === 0;
+    before.setAttribute("aria-label", "Mover antes " + s.name);
+    const after = button("↓", () => selectAction(() => reorderScene(1)));
+    after.disabled = i === project.scenes.length - 1;
+    after.setAttribute("aria-label", "Mover después " + s.name);
+    const copy = button("Duplicar", () => selectAction(duplicateScene));
+    copy.setAttribute("aria-label", "Duplicar " + s.name);
+    tools.append(before, after, copy);
+    card.append(tools);
+    root.append(card);
+  });
+  const audio = project.audio && asset(project.audio.assetId);
+  const sound = el("div", "mobile-audio-summary");
+  sound.append(
+    el("strong", null, audio ? "♫ " + audio.name : "Música o narración"),
+  );
+  sound.append(
+    button(audio ? "Ajustar audio" : "＋ Añadir audio", () => {
+      if (audio) {
+        mode = "scene";
+        renderInspector();
+        mobilePanel("inspector");
+      } else {
+        libraryType = "audio";
+        renderLibrary();
+        mobilePanel("library");
+        $("asset-file").click();
+      }
+    }),
+  );
+  root.append(sound);
+}
+function openMobileLayers() {
+  stop();
+  const root = $("mobile-layer-list");
+  root.replaceChildren();
+  const s = scene();
+  if (layer()) {
+    const order = group("ORDEN EN ESTA ESCENA");
+    order.append(layerOrderControls());
+    root.append(order);
+  }
+  root.append(
+    el(
+      "p",
+      "property-hint",
+      "Las capas de arriba se dibujan delante. Solo estás editando esta escena.",
+    ),
+  );
+  if (!s || !s.layers.length)
+    root.append(
+      el(
+        "p",
+        "property-hint",
+        "Todavía no hay personajes ni textos. Añade un sprite de tu biblioteca.",
+      ),
+    );
+  for (const item of [...(s?.layers || [])].reverse()) {
+    const row = el(
+      "div",
+      "mobile-layer-row" + (item.id === layerId ? " active" : ""),
+    );
+    const select = button(
+      (item.kind === "text" ? "T · " : "▧ · ") + item.name,
+      () => {
+        $("layers-dialog").close();
+        layerId = item.id;
+        mode = "scene";
+        point = "start";
+        time = startOf(s.id);
+        stop();
+        refresh();
+        mobilePanel("editor");
+      },
+    );
+    select.className = "mobile-layer-select";
+    const remove = button(
+      "Quitar",
+      () => {
+        deleteLayer(s.id, item.id);
+        openMobileLayers();
+      },
+      "danger",
+    );
+    remove.setAttribute("aria-label", "Quitar " + item.name + " de la escena");
+    row.append(select, remove);
+    root.append(row);
+  }
+  if (!$("layers-dialog").open) $("layers-dialog").showModal();
+}
+$("mobile-save").onclick = saveProject;
+$("mobile-undo").onclick = () => $("undo").click();
+$("mobile-redo").onclick = () => $("redo").click();
+$("mobile-project-name").onchange = () => {
+  const value =
+    $("mobile-project-name").value.trim().slice(0, 80) || "Mi historia";
+  if (value === project.name) return;
+  checkpoint();
+  project.name = value;
+  refresh();
+  changed();
+};
+$("mobile-grid-form").onsubmit = (e) => {
+  e.preventDefault();
+  applyGrid(
+    asset(),
+    +$("mobile-grid-cols").value,
+    +$("mobile-grid-rows").value,
+  );
+};
+$("mobile-grid-details").onclick = () => mobilePanel("inspector");
+$("mobile-edit-layer").onclick = () => {
+  renderInspector();
+  mobilePanel("inspector");
+  $("inspector-content").scrollTop = 0;
+};
+$("mobile-copy-layer").onclick = duplicateLayer;
+$("mobile-order-layer").onclick = openMobileLayers;
+$("mobile-delete-layer").onclick = () => {
+  deleteLayer();
+  toast("Capa quitada de la escena. Puedes deshacerlo.");
+};
+$("mobile-layers").onclick = openMobileLayers;
+$("mobile-selected-name").onclick = openMobileLayers;
+$("mobile-add-sprite").onclick = () => {
+  setLibrary("sprite");
+  mobilePanel("library");
+};
+$("mobile-add-text").onclick = addText;
+$("close-layers-dialog").onclick = () => $("layers-dialog").close();
+$("dialog-add-sprite").onclick = () => {
+  $("layers-dialog").close();
+  setLibrary("sprite");
+  mobilePanel("library");
+};
+$("dialog-add-text").onclick = () => {
+  $("layers-dialog").close();
+  addText();
+};
+$("mobile-inspector-back").onclick = () => {
+  mobilePanel("editor");
+};
+$("mobile-current-scene").onclick = () => mobilePanel("timeline");
+$("mobile-prev-scene").onclick = () => {
+  const i = project.scenes.indexOf(scene());
+  if (i > 0) selectScene(project.scenes[i - 1].id);
+};
+$("mobile-next-scene").onclick = () => {
+  const i = project.scenes.indexOf(scene());
+  if (i < project.scenes.length - 1) selectScene(project.scenes[i + 1].id);
+};
+$("mobile-scene-settings").onclick = () => {
+  layerId = null;
+  mode = "scene";
+  renderInspector();
+  mobilePanel("inspector");
+  $("inspector-content").scrollTop = 0;
+};
 function init() {
   buildDemo();
   refresh();
   scheduleAnimation();
   $("save-status").innerHTML = "<i></i> Solo en tu navegador";
+  mobilePanel("editor");
   if ("serviceWorker" in navigator && location.protocol !== "file:")
     window.addEventListener("load", () =>
       navigator.serviceWorker.register("./sw.js").catch(() => {}),

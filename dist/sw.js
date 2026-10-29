@@ -1,5 +1,5 @@
 // Cache only the app shell. User images, audio and projects are never persisted.
-const CACHE = "spritelab-shell-v3";
+const CACHE = "spritelab-shell-v4-mobile";
 const FILES = [
   "./",
   "./index.html",

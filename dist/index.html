@@ -49,6 +49,7 @@
           aria-label="Rehacer"
         >
           ↷</button
+        ><button id="mobile-save" class="mobile-only">Guardar</button
         ><button id="project-menu" class="quiet">Proyecto <span>⌄</span></button
         ><button
           id="share-video"
@@ -63,6 +64,16 @@
       </div>
     </header>
     <div id="project-popover" class="popover" hidden>
+      <label class="mobile-only mobile-project-name"
+        >Nombre del proyecto<input
+          id="mobile-project-name"
+          maxlength="80"
+          aria-label="Nombre del proyecto en móvil"
+      /></label>
+      <div class="mobile-only mobile-history">
+        <button id="mobile-undo">↶ Deshacer</button
+        ><button id="mobile-redo">↷ Rehacer</button>
+      </div>
       <button id="save-project">↓ Descargar proyecto</button
       ><button id="load-project">↑ Abrir proyecto</button
       ><button id="new-project">＋ Proyecto vacío</button
@@ -74,11 +85,20 @@
       accept="application/json,.json"
       hidden
     />
-    <div class="mobile-nav">
-      <button data-panel="library">▧ Biblioteca</button
-      ><button data-panel="editor" class="active">◈ Escenario</button
-      ><button data-panel="inspector">☷ Propiedades</button>
-    </div>
+    <nav class="mobile-nav" aria-label="Secciones del estudio">
+      <button data-panel="library">
+        <span aria-hidden="true">▧</span>Recursos
+      </button>
+      <button data-panel="editor" class="active" aria-current="page">
+        <span aria-hidden="true">◈</span>Escenario
+      </button>
+      <button data-panel="timeline">
+        <span aria-hidden="true">▤</span>Escenas
+      </button>
+      <button data-panel="inspector">
+        <span aria-hidden="true">☷</span>Ajustes
+      </button>
+    </nav>
     <div class="studio-layout" id="studio-layout">
       <aside class="library panel" id="library-panel">
         <div class="section-title">
@@ -108,6 +128,7 @@
           multiple
           hidden
         />
+        <p id="library-scene-context" class="library-scene-context"></p>
         <div id="asset-list" class="asset-list"></div>
         <div class="library-bottom">
           <button id="ai-prompt">
@@ -134,6 +155,15 @@
           </button>
         </div>
         <div id="scene-workspace" class="scene-workspace">
+          <div class="mobile-scene-switcher mobile-only">
+            <button id="mobile-prev-scene" aria-label="Escena anterior">
+              ‹</button
+            ><button id="mobile-current-scene" title="Ver todas las escenas">
+              Escena 1 de 2</button
+            ><button id="mobile-next-scene" aria-label="Escena siguiente">
+              ›</button
+            ><button id="mobile-scene-settings">Fondo / duración</button>
+          </div>
           <div class="canvas-toolbar">
             <div>
               <span class="status-dot"></span
@@ -169,6 +199,29 @@
               </button>
             </div>
           </div>
+          <div
+            id="mobile-layer-actions"
+            class="mobile-only mobile-layer-actions"
+          >
+            <button
+              class="mobile-selected-name"
+              id="mobile-selected-name"
+              aria-label="Seleccionar personajes de esta escena"
+            >
+              Seleccionar personaje ▾
+            </button>
+            <div id="mobile-selection-actions" hidden>
+              <button id="mobile-edit-layer">Editar</button
+              ><button id="mobile-order-layer">Orden</button
+              ><button id="mobile-copy-layer">Duplicar</button
+              ><button id="mobile-delete-layer" class="danger">Quitar</button>
+            </div>
+            <div id="mobile-add-actions">
+              <button id="mobile-layers">Personajes</button
+              ><button id="mobile-add-sprite">＋ Sprite</button
+              ><button id="mobile-add-text">＋ Texto</button>
+            </div>
+          </div>
           <div class="stage-caption">
             <span>↔ Arrastra para posicionar · Inicio y final para animar</span
             ><span id="canvas-size">1920 × 1080</span>
@@ -185,6 +238,30 @@
               ><button id="sprite-fit">Ajustar</button>
             </div>
           </div>
+          <form id="mobile-grid-form" class="mobile-only mobile-grid-form">
+            <label
+              >Columnas<input
+                id="mobile-grid-cols"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="64"
+                value="8"
+                aria-label="Columnas de la rejilla" /></label
+            ><label
+              >Filas<input
+                id="mobile-grid-rows"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="64"
+                value="1"
+                aria-label="Filas de la rejilla" /></label
+            ><button class="accent" type="submit">Aplicar</button
+            ><button id="mobile-grid-details" type="button">
+              Ajustar cortes
+            </button>
+          </form>
           <div class="sprite-viewport" id="sprite-viewport">
             <canvas
               id="sprite-canvas"
@@ -195,6 +272,10 @@
             <p id="sprite-empty">
               Selecciona o importa una hoja de sprites PNG.
             </p>
+          </div>
+          <div class="mobile-only mobile-grid-help">
+            Configura las filas y columnas. Amplía la imagen para mover los
+            cortes con el dedo.
           </div>
           <div class="sprite-bottom">
             <div>
@@ -241,6 +322,9 @@
       <aside class="inspector panel" id="inspector-panel">
         <div class="section-title">
           <h2>Propiedades</h2>
+          <button class="mobile-only" id="mobile-inspector-back">
+            ← Escenario
+          </button>
           <span id="inspector-type">ESCENA</span>
         </div>
         <div id="inspector-content"></div>
@@ -258,7 +342,7 @@
         </div>
       </aside>
     </div>
-    <section class="timeline panel">
+    <section class="timeline panel" id="timeline-panel">
       <div class="timeline-toolbar">
         <div>
           <h2>Montaje</h2>
@@ -270,6 +354,7 @@
           ><button id="add-scene">＋ Escena</button>
         </div>
       </div>
+      <div class="mobile-only mobile-scene-list" id="mobile-scene-list"></div>
       <div class="timeline-scroll" id="timeline-scroll">
         <div class="timeline-content" id="timeline-content">
           <div class="time-ruler" id="time-ruler"></div>
@@ -293,6 +378,26 @@
       </div>
     </section>
     <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="layers-dialog">
+      <div class="dialog-title">
+        <div>
+          <h2>Personajes y textos</h2>
+          <p>Elige una capa para editarla o quitarla de la escena.</p>
+        </div>
+        <button
+          id="close-layers-dialog"
+          class="icon-button"
+          aria-label="Cerrar personajes"
+        >
+          ×
+        </button>
+      </div>
+      <div id="mobile-layer-list"></div>
+      <div class="dialog-actions">
+        <button id="dialog-add-sprite" class="accent">＋ Añadir sprite</button
+        ><button id="dialog-add-text">＋ Añadir texto</button>
+      </div>
+    </dialog>
     <dialog id="export-dialog">
       <div class="dialog-title">
         <div>
